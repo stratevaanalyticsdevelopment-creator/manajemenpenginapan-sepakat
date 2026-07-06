@@ -1,0 +1,180 @@
+// ============================================================
+// PRISMA SCHEMA — Guest House Sepakat
+// Database: Supabase (PostgreSQL)
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")    // pooled connection (pgbouncer) - runtime queries
+  directUrl = env("DIRECT_URL")      // direct connection - migrations only
+}
+
+// ── USER & AKSES ──────────────────────────────────────────────
+enum Role {
+  Admin
+  Resepsionis
+  Housekeeping
+}
+
+model User {
+  id        String   @id @default(cuid())
+  nama      String
+  username  String   @unique
+  password  String   // hashed with bcrypt
+  role      Role
+  aktif     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+// ── KAMAR ──────────────────────────────────────────────────────
+enum StatusKamar {
+  Tersedia
+  Terisi
+  Maintenance
+}
+
+enum TipeKamar {
+  Standard
+  Deluxe
+  Suite
+}
+
+model Kamar {
+  id          String       @id @default(cuid())
+  nomor       Int          @unique
+  tipe        TipeKamar
+  harga       Int          // rupiah per malam
+  status      StatusKamar  @default(Tersedia)
+  fasilitas   String?
+  lantai      Int          @default(1)
+  kapasitas   Int          @default(2)
+  fotoUrl     String?      // URL foto kamar (Supabase Storage)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  reservasi      Reservasi[]
+  housekeeping   Housekeeping[]
+
+  @@map("kamar")
+}
+
+// ── TAMU ───────────────────────────────────────────────────────
+enum JenisKelamin {
+  Laki_laki @map("Laki-laki")
+  Perempuan
+}
+
+model Tamu {
+  id        String       @id @default(cuid())
+  nama      String
+  ktp       String?
+  jk        JenisKelamin @default(Laki_laki)
+  hp        String?
+  email     String?
+  kota      String?
+  catatan   String?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  reservasi Reservasi[]
+
+  @@map("tamu")
+}
+
+// ── RESERVASI ────────────────────────────────────────────────
+enum StatusReservasi {
+  Pending
+  Confirmed
+  Checked_In  @map("Checked In")
+  Checked_Out @map("Checked Out")
+}
+
+model Reservasi {
+  id          String          @id @default(cuid())
+  tamuId      String
+  kamarId     String
+  checkIn     DateTime        @db.Date
+  checkOut    DateTime        @db.Date
+  status      StatusReservasi @default(Pending)
+  tglBooking  DateTime        @default(now())
+  catatan     String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  tamu        Tamu            @relation(fields: [tamuId], references: [id])
+  kamar       Kamar           @relation(fields: [kamarId], references: [id])
+  pembayaran  Pembayaran[]
+
+  @@map("reservasi")
+  @@index([tamuId])
+  @@index([kamarId])
+}
+
+// ── PEMBAYARAN ─────────────────────────────────────────────────
+enum MetodeBayar {
+  Tunai
+  Transfer_Bank @map("Transfer Bank")
+  Kartu_Kredit  @map("Kartu Kredit")
+  QRIS
+}
+
+enum StatusBayar {
+  Lunas
+  DP
+  Belum_Bayar @map("Belum Bayar")
+}
+
+model Pembayaran {
+  id          String      @id @default(cuid())
+  reservasiId String
+  tglBayar    DateTime    @db.Date
+  jumlah      Int
+  metode      MetodeBayar
+  status      StatusBayar @default(Lunas)
+  noRef       String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  reservasi   Reservasi   @relation(fields: [reservasiId], references: [id])
+
+  @@map("pembayaran")
+  @@index([reservasiId])
+}
+
+// ── HOUSEKEEPING ───────────────────────────────────────────────
+enum StatusTugas {
+  Pending
+  Proses
+  Selesai
+}
+
+enum Prioritas {
+  Tinggi
+  Normal
+  Rendah
+}
+
+model Housekeeping {
+  id        String      @id @default(cuid())
+  kamarId   String
+  jenis     String
+  status    StatusTugas @default(Pending)
+  petugas   String?
+  tgl       DateTime    @db.Date
+  prioritas Prioritas   @default(Normal)
+  catatan   String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  kamar     Kamar       @relation(fields: [kamarId], references: [id])
+
+  @@map("housekeeping")
+  @@index([kamarId])
+}
